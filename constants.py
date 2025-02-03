@@ -1,3 +1,5 @@
+### Constants shared across files
+
 import pathlib
 
 ### Task parameters
