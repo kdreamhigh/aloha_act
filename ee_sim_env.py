@@ -1,4 +1,4 @@
-# Mujoco + DM_Control environments with EE space control
+### Mujoco + DM_Control environments with EE space control
 
 import numpy as np
 import collections

@@ -1,7 +1,11 @@
+### simulation 환경의 기본 class와 동작 정의의
+
 import numpy as np
 import os
 import collections
 import matplotlib.pyplot as plt
+
+# dm_control: 물리기반 시뮬레이션 라이브러리, mujoco를 기반으로 작동동
 from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
