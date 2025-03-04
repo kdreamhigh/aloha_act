@@ -18,7 +18,7 @@ from dm_control.suite import base
 import IPython
 e = IPython.embed
 
-
+## 작업별로 환경 설정정
 def make_ee_sim_env(task_name):
     """
     Environment for simulated robot bi-manual manipulation, with end-effector control.
@@ -37,21 +37,26 @@ def make_ee_sim_env(task_name):
                                         right_gripper_qvel (1)]     # normalized gripper velocity (pos: opening, neg: closing)
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
     """
+    # task가 cube transfer일 때의 환경 설정
     if 'sim_transfer_cube' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
         task = TransferCubeEETask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
+    # task가 insertion일 때의 환경 설정  
     elif 'sim_insertion' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_insertion.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
         task = InsertionEETask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
+    # 메서드가 구현되지 않았을 때때
     else:
         raise NotImplementedError
     return env
+
+
 
 class BimanualViperXEETask(base.Task):
     def __init__(self, random=None):
