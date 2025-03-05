@@ -14,6 +14,11 @@ from utils import sample_box_pose, sample_insertion_pose
 from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
+# dm_control은 DeepMind에서 개발한 강화 학습용 물리 시뮬레이션 라이브러리.
+# MuJoCo 기반으로 동작하며, 로봇 제어 및 RL(강화 학습) 실험을 쉽게 수행할 수 있도록 설계됨.
+# mujoco: MuJoCo 물리 엔진을 직접 다룰 수 있는 인터페이스.
+# control: 강화 학습 환경(Environment)을 생성하고 제어하는 기능 포함.
+# suite: 사전 정의된 RL 환경을 제공 (예: dm_control.suite.cartpole).
 
 import IPython
 e = IPython.embed
@@ -44,7 +49,7 @@ def make_ee_sim_env(task_name):
         task = TransferCubeEETask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
-    # task가 insertion일 때의 환경 설정  
+    # task가 insertion일 때의 환경 설정, DT=0.02 (20ms)  
     elif 'sim_insertion' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_insertion.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
@@ -57,25 +62,32 @@ def make_ee_sim_env(task_name):
     return env
 
 
-
+# BimanualViperXEETask(base.Task):는 DeepMind Control Suite (dm_control)의 base.Task 클래스를 상속받아 정의된 사용자 정의 작업(Task) 클래스입니다.
+# 이 클래스는 Bimanual (양손) 로봇 "ViperX"의 End-Effector (EE, 끝단 조작기) 제어 작업을 정의하는 역할
+# base.Task는 DeepMind Control Suite의 기본 작업(Task) 클래스입니다. (초기화, 관찰값 반환, 보상 함수, 목표 조건 등을 포함)
 class BimanualViperXEETask(base.Task):
     def __init__(self, random=None):
         super().__init__(random=random)
 
     def before_step(self, action, physics):
+        # action: agent가 수행할 행동
+        # physics: 현재 물리 환경 mujoco physics 객체체
+        # action은 좌/우 손의 움직임을 모두 포함하는 배열
         a_len = len(action) // 2
-        action_left = action[:a_len]
-        action_right = action[a_len:]
+        action_left = action[:a_len]    # 왼손 action
+        action_right = action[a_len:]   # 오른손 action
 
         # set mocap position and quat
         # left
-        np.copyto(physics.data.mocap_pos[0], action_left[:3])
-        np.copyto(physics.data.mocap_quat[0], action_left[3:7])
+        np.copyto(physics.data.mocap_pos[0], action_left[:3])   # 위치설정 x, y, z
+        np.copyto(physics.data.mocap_quat[0], action_left[3:7]) # 회전 설정 Quaternion
         # right
         np.copyto(physics.data.mocap_pos[1], action_right[:3])
         np.copyto(physics.data.mocap_quat[1], action_right[3:7])
 
         # set gripper
+        # action_left[7] 왼손 그리퍼 위치 열림/닫힘 
+        # PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN 그리퍼 액션을 실제 mujoco 값으로 변환하는 함수수
         g_left_ctrl = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(action_left[7])
         g_right_ctrl = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(action_right[7])
         np.copyto(physics.data.ctrl, np.array([g_left_ctrl, -g_left_ctrl, g_right_ctrl, -g_right_ctrl]))
@@ -97,6 +109,7 @@ class BimanualViperXEETask(base.Task):
         np.copyto(physics.data.mocap_quat[1],  [1, 0, 0, 0])
 
         # reset gripper control
+        # 그리퍼는 두 개의 반대 방향으로 움직이는 조인트를 가지므로, 하나를 열면 다른 하나는 닫히는 방식. [-value, value]
         close_gripper_control = np.array([
             PUPPET_GRIPPER_POSITION_CLOSE,
             -PUPPET_GRIPPER_POSITION_CLOSE,
@@ -104,11 +117,14 @@ class BimanualViperXEETask(base.Task):
             -PUPPET_GRIPPER_POSITION_CLOSE,
         ])
         np.copyto(physics.data.ctrl, close_gripper_control)
+        # physics.data.ctrl: MuJoCo에서 로봇의 제어 입력(토크, 힘, 그리퍼 상태 등)을 설정하는 변수
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
         super().initialize_episode(physics)
 
+    # @staticmethod를 사용하면 클래스의 인스턴스를 생성하지 않고도 메서드를 호출할 수 있음.
+    # self를 사용하지 않으며, physics 객체만 필요함.
     @staticmethod
     def get_qpos(physics):
         qpos_raw = physics.data.qpos.copy()
@@ -119,6 +135,7 @@ class BimanualViperXEETask(base.Task):
         left_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(left_qpos_raw[6])]
         right_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(right_qpos_raw[6])]
         return np.concatenate([left_arm_qpos, left_gripper_qpos, right_arm_qpos, right_gripper_qpos])
+        # 총 반환 크기 [6+1+6+1=14]
 
     @staticmethod
     def get_qvel(physics):
@@ -134,10 +151,11 @@ class BimanualViperXEETask(base.Task):
     @staticmethod
     def get_env_state(physics):
         raise NotImplementedError
+        # 아직 구현되지 않았음을 알리는 예외
 
     def get_observation(self, physics):
         # note: it is important to do .copy()
-        obs = collections.OrderedDict()
+        obs = collections.OrderedDict()     # OrderedDict를 사용하여 순서가 유지되는 딕셔너리 생성
         obs['qpos'] = self.get_qpos(physics)
         obs['qvel'] = self.get_qvel(physics)
         obs['env_state'] = self.get_env_state(physics)
@@ -167,11 +185,13 @@ class TransferCubeEETask(BimanualViperXEETask):
         self.initialize_robots(physics)
         # randomize box position
         cube_pose = sample_box_pose()
-        box_start_idx = physics.model.name2id('red_box_joint', 'joint')
+        box_start_idx = physics.model.name2id('red_box_joint', 'joint') #mujoco에서 큐브의 id를 찾음
         np.copyto(physics.data.qpos[box_start_idx : box_start_idx + 7], cube_pose)
         # print(f"randomized cube position to {cube_position}")
 
         super().initialize_episode(physics)
+        # 부모 클래스 (BimanualViperXEETask)의 initialize_episode 실행.
+
 
     @staticmethod
     def get_env_state(physics):
@@ -181,6 +201,11 @@ class TransferCubeEETask(BimanualViperXEETask):
     def get_reward(self, physics):
         # return whether left gripper is holding the box
         all_contact_pairs = []
+        # physics.data.ncon: 현재 MuJoCo 환경에서 충돌이 발생한 개수.
+        # physics.data.contact[i_contact]: 각 충돌(contact) 정보 저장.
+        # contact.geom1, contact.geom2: 충돌한 두 물체의 ID(인덱스) 가져오기.
+        # physics.model.id2name(id, 'geom'): MuJoCo의 ID를 실제 물체 이름으로 변환.
+        # 결과: all_contact_pairs 리스트에 현재 충돌한 모든 물체의 이름 쌍을 저장.
         for i_contact in range(physics.data.ncon):
             id_geom_1 = physics.data.contact[i_contact].geom1
             id_geom_2 = physics.data.contact[i_contact].geom2
@@ -190,18 +215,21 @@ class TransferCubeEETask(BimanualViperXEETask):
             all_contact_pairs.append(contact_pair)
 
         touch_left_gripper = ("red_box", "vx300s_left/10_left_gripper_finger") in all_contact_pairs
+        # 큐브가 오른손 그리퍼와 접촉했는지 확인.
         touch_right_gripper = ("red_box", "vx300s_right/10_right_gripper_finger") in all_contact_pairs
-        touch_table = ("red_box", "table") in all_contact_pairs
+        # 큐브가 왼손 그리퍼와 접촉했는지 확인.
+        touch_table = ("red_box", "table") in all_contact_pairs 
+        #큐브가 테이블과 접촉했는지 확인.
 
         reward = 0
         if touch_right_gripper:
-            reward = 1
+            reward = 1  #오른손이 큐브를 잡음
         if touch_right_gripper and not touch_table: # lifted
-            reward = 2
+            reward = 2  # 큐브를 들어 올림
         if touch_left_gripper: # attempted transfer
-            reward = 3
+            reward = 3  # 왼손이 큐브를 잡음 (이전 상태에서 전달 시도)
         if touch_left_gripper and not touch_table: # successful transfer
-            reward = 4
+            reward = 4 # 큐브가 왼손에서 공중에 떠 있음 (완전한 전달 성공)
         return reward
 
 

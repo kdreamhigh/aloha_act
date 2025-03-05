@@ -2,6 +2,7 @@ import time
 import os
 import numpy as np
 import argparse
+# 명령줄 인자(--num_episodes, --dataset_dir)를 처리.
 import matplotlib.pyplot as plt
 import h5py
 
@@ -30,9 +31,11 @@ def main(args):
     inject_noise = False
     render_cam_name = 'angle'
 
+    # 데이터 저장을 위한 디렉토리를 생성 (dataset_dir가 존재하지 않으면 새로 만듦).
     if not os.path.isdir(dataset_dir):
         os.makedirs(dataset_dir, exist_ok=True)
-
+    
+    # SIM_TASK_CONFIGS에서 현재 태스크의 에피소드 길이(episode_len)와 사용할 카메라 목록(camera_names)을 로드
     episode_len = SIM_TASK_CONFIGS[task_name]['episode_len']
     camera_names = SIM_TASK_CONFIGS[task_name]['camera_names']
     if task_name == 'sim_transfer_cube_scripted':
@@ -57,14 +60,16 @@ def main(args):
             plt_img = ax.imshow(ts.observation['images'][render_cam_name])
             plt.ion()
         for step in range(episode_len):
-            action = policy(ts)
-            ts = env.step(action)
-            episode.append(ts)
+            action = policy(ts)     # 정책에 따라 액션 선택
+            ts = env.step(action)   # 환경에 적응
+            episode.append(ts)      # episode 리스트에 모든 time_step을 저장
             if onscreen_render:
                 plt_img.set_data(ts.observation['images'][render_cam_name])
                 plt.pause(0.002)
         plt.close()
 
+        # 보상의 총합(episode_return) 및 최대 보상(episode_max_reward)을 계산.
+        # 최대 보상이 max_reward와 같으면 성공, 그렇지 않으면 실패로 간주.
         episode_return = np.sum([ts.reward for ts in episode[1:]])
         episode_max_reward = np.max([ts.reward for ts in episode[1:]])
         if episode_max_reward == env.task.max_reward:
@@ -72,6 +77,7 @@ def main(args):
         else:
             print(f"{episode_idx=} Failed")
 
+        # 각 타임스텝에서 로봇의 관절 위치(qpos)와 그리퍼 상태(gripper_ctrl)를 저장.
         joint_traj = [ts.observation['qpos'] for ts in episode]
         # replace gripper pose with gripper control
         gripper_ctrl_traj = [ts.observation['gripper_ctrl'] for ts in episode]
@@ -100,6 +106,8 @@ def main(args):
             ax = plt.subplot()
             plt_img = ax.imshow(ts.observation['images'][render_cam_name])
             plt.ion()
+        
+        # 기존 시뮬레이션에서 저장한 Joint Trajectory를 그대로 재생 (env.step(action)).
         for t in range(len(joint_traj)): # note: this will increase episode length by 1
             action = joint_traj[t]
             ts = env.step(action)
